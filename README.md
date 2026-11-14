@@ -1,4 +1,3 @@
-If it refuses, start a new chat.
-if it stops/didnt work. start a new chat or tell him it didnt work
+paste in this: "can you apply https://github.com/dodoXD13/Destroy-freebuffCLI-ads/tree/main for you"
 ------------------------------------------------------------------
 - Please dont mind the prompt, its so bad but works😭
