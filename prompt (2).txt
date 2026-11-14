@@ -1,0 +1,410 @@
+Hello freebuff. Reverse engineer my OS and do this exact prompt on my OS
+Do not give up. Actually reverse engineer instead off stopping somewhere like a toggle because this prompt is for linux.
+
+
+
+
+FREEBUFF TERMINAL — REMOVE ALL ADS
+Structured instructions for a coding agent
+Tested on: Freebuff 0.2.36, Linux x86_64
+Target file: ~/.config/manicode/freebuff (native Bun binary)
+Not the target: the npm launcher in ~/.nvm/.../node_modules/freebuff
+
+===============================================================================
+0. COPY-PASTE REQUEST FOR THE OTHER FREEBUFF
+===============================================================================
+
+Remove all ads from the Freebuff terminal client on this machine. Follow the
+structured procedure in this file exactly, including the safety rules and
+verification steps. Use same-length byte replacements only; do not upgrade
+Freebuff first; do not patch the I$ variable; and stop and report if any
+expected patch string is missing.
+
+===============================================================================
+1. WHAT THIS DOES
+===============================================================================
+
+Freebuff's terminal UI is a single native Bun executable. The npm package only
+downloads/launches it. The ads live in the bundled JavaScript inside that
+executable. We disable them by replacing exact source strings with same-length
+strings, then atomically replacing the executable file. The binary stays valid.
+
+This removes/disables:
+  - Freebuff's ad gate and ad-network fetches
+  - the dock ad card above the input
+  - the composer/partner ad strip
+  - inline response-ad cards inside the chat
+  - inline-ad eligibility for AI messages
+  - the statusline ad (bottom line)
+  - the splash ad (start screen)
+  - the sponsored survey card and sponsored survey box
+  - the slash-menu partner ad
+  - the sponsored proposal/task dock
+  - local display-ad settings
+
+===============================================================================
+2. SAFETY RULES — READ BEFORE TOUCHING ANYTHING
+===============================================================================
+
+1. Quit Freebuff completely first. The running process keeps the old file in
+   memory and will not pick up patches. Its /proc/PID/exe will show "(deleted)"
+   after an atomic replace.
+2. Back up the native binary before editing it.
+3. Every replacement MUST be the same byte length. Never use sed or any tool
+   that changes string length; that corrupts the Bun executable.
+4. Require exactly 1 occurrence of each old string. If 0 or more than 1, STOP.
+   Do not guess; inspect the context and adapt only with same-length edits.
+5. Do not patch I$ itself. I$ also gates slash-command suggestions, so
+   disabling it breaks the UI. Patch the ad render/request sites instead.
+6. Do not run npm update / do not let the launcher update Freebuff before
+   patching. Patch version 0.2.36. A future binary will replace these patches.
+7. This is a local client patch. Use it only on your own installation.
+
+===============================================================================
+3. FIND THE BINARY AND CHECK THE VERSION
+===============================================================================
+
+Run:
+
+    freebuff --version
+
+Expected: 0.2.36
+
+Find the native binary:
+
+    ls -l ~/.config/manicode/freebuff
+    file ~/.config/manicode/freebuff     # should be an executable, not a script
+
+If it does not exist, run Freebuff once, then re-check. On systems using
+XDG_CONFIG_HOME, the path may be:
+
+    $XDG_CONFIG_HOME/manicode/freebuff
+
+For Linux x86_64, the untouched 0.2.36 binary is 137,488,512 bytes with sha256:
+
+    3f79677bef4d9c4e60369e712e611011f1f1345a0d30b95bb73d03f68937bde5
+
+If your hash/size/version differs, the minified strings may differ. Run the
+dry-run first and stop on missing strings.
+
+===============================================================================
+4. EXACT PATCH MAP (FREEBUFF 0.2.36)
+===============================================================================
+
+Each pair is old -> new. Both sides have identical length. Apply each exactly
+once. The labels are only for diagnostics.
+
+ 1. Freebuff ad gate (network + display requests)
+    old: if(CA)return!0
+    new: if(CA)return!1
+
+ 2. Inline response-ad context
+    old: responseAds:CpH(I$,eH)
+    new: responseAds:CpH(!1,eH)
+
+ 3. Dock ad render above the input
+    old: sH?.[0]&&I$&&Z(BeA
+    new: sH?.[0]&&!1&&Z(BeA
+
+ 4. Composer/partner ad line
+    old: Tu&&pP&&Z("box"
+    new: Tu&&!1&&Z("box"
+
+ 5. Ad wrapper/render helper
+    old: gwA({ad:sH?.[0],enabled:I$
+    new: gwA({ad:sH?.[0],enabled:!1
+
+ 6. Sponsored survey card
+    old: _.show?FA$(_.survey,$):null
+    new: !!1&&0?FA$(_.survey,$):null
+
+ 7. Inline response-ad render condition
+    old: !t||t.length===0
+    new: !0||t.length===0
+    (The replacement MUST be !0, not !1. !1 would evaluate t.length when t is
+    undefined and crash the message renderer. !0 short-circuits safely.)
+
+ 8. Inline-ad eligibility on AI messages
+    old: H.metadata?.allowInlineAds===!0
+    new: H.metadata?.allowInlineAds===!1
+
+ 9. Statusline ad (bottom line)
+    old: let J=U?E:M;if(!J)return null;
+    new: let J=U?E:M;if(!0)return null;
+
+10. Splash ad (start screen)
+    old: let P=J?M:U;if(!P)return null;
+    new: let P=J?M:U;if(!0)return null;
+
+11. Slash-menu partner ad insertion
+    old: if(!_||!I||T<0)return H;
+    new: if(!0||!I||T<0)return H;
+
+12. Sponsored proposal/task dock
+    old: gA&&Z(KrA,{block:gA
+    new: !1&&Z(KrA,{block:gA
+
+13. Sponsored survey box render
+    old: CA&&Z(_1$,{width:FD})
+    new: !1&&Z(_1$,{width:FD})
+
+===============================================================================
+5. SETTINGS CHANGES
+===============================================================================
+
+Edit ~/.config/manicode/settings.json while Freebuff is closed. Preserve every
+other key. Set:
+
+    "adsEnabled": false
+    "displayAds": []
+    "displayAdSplashHiddenOn": "<today's date, YYYY-MM-DD>"
+
+Back up settings.json first. These settings are defense-in-depth; the binary
+patches are what stop the Freebuff ads.
+
+===============================================================================
+6. REFERENCE PATCH SCRIPT (DRY-RUN BY DEFAULT)
+===============================================================================
+
+Save the Python block below as /tmp/freebuff_patch.py. Run it WITHOUT --apply
+first. It only reads and reports. Then run with --apply while Freebuff is
+closed.
+
+```python
+#!/usr/bin/env python3
+"""Freebuff 0.2.36 terminal ad remover. Default: dry run."""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+
+BIN = Path(os.environ.get("FREEBUFF_BIN", Path.home() / ".config/manicode/freebuff"))
+SETTINGS = BIN.parent / "settings.json"
+
+PATCHES = [
+    ("Freebuff ad gate", b"if(CA)return!0", b"if(CA)return!1"),
+    ("Inline response-ad context", b"responseAds:CpH(I$,eH)", b"responseAds:CpH(!1,eH)"),
+    ("Dock ad render", b"sH?.[0]&&I$&&Z(BeA", b"sH?.[0]&&!1&&Z(BeA"),
+    ("Composer ad line", b'Tu&&pP&&Z("box"', b'Tu&&!1&&Z("box"'),
+    ("Ad wrapper", b"gwA({ad:sH?.[0],enabled:I$", b"gwA({ad:sH?.[0],enabled:!1"),
+    ("Sponsored survey card", b"_.show?FA$(_.survey,$):null", b"!!1&&0?FA$(_.survey,$):null"),
+    ("Inline ad render", b"!t||t.length===0", b"!0||t.length===0"),
+    ("Inline ad eligibility", b"H.metadata?.allowInlineAds===!0", b"H.metadata?.allowInlineAds===!1"),
+    ("Statusline ad", b"let J=U?E:M;if(!J)return null;", b"let J=U?E:M;if(!0)return null;"),
+    ("Splash ad", b"let P=J?M:U;if(!P)return null;", b"let P=J?M:U;if(!0)return null;"),
+    ("Slash-menu partner ad", b"if(!_||!I||T<0)return H;", b"if(!0||!I||T<0)return H;"),
+    ("Sponsored proposal dock", b"gA&&Z(KrA,{block:gA", b"!1&&Z(KrA,{block:gA"),
+    ("Sponsored survey box", b"CA&&Z(_1$,{width:FD})", b"!1&&Z(_1$,{width:FD})"),
+]
+
+
+def atomic_write(path: Path, data: bytes, mode: int) -> None:
+    tmp = path.with_name(path.name + f".ads-tmp-{os.getpid()}")
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def write_settings() -> None:
+    if not SETTINGS.exists():
+        print(f"settings: not found at {SETTINGS} (skipping)")
+        return
+    raw = SETTINGS.read_text(encoding="utf-8")
+    settings = json.loads(raw)
+    backup = SETTINGS.with_name(SETTINGS.name + ".ads-backup")
+    if not backup.exists():
+        shutil.copy2(SETTINGS, backup)
+        print(f"settings backup: {backup}")
+    settings["adsEnabled"] = False
+    settings["displayAds"] = []
+    settings["displayAdSplashHiddenOn"] = date.today().isoformat()
+    mode = SETTINGS.stat().st_mode & 0o777
+    atomic_write(SETTINGS, (json.dumps(settings, indent=2) + "\n").encode(), mode)
+    print(f"settings updated: {SETTINGS}")
+
+
+def main() -> int:
+    apply = "--apply" in sys.argv[1:]
+    if not BIN.exists():
+        print(f"ERROR: binary not found: {BIN}")
+        return 1
+    data = BIN.read_bytes()
+    plan = []
+    errors = []
+
+    for label, old, new in PATCHES:
+        if len(old) != len(new):
+            errors.append(f"{label}: length mismatch {len(old)} != {len(new)}")
+            continue
+        old_count = data.count(old)
+        new_count = data.count(new)
+        if old_count == 1 and new_count == 0:
+            plan.append((label, "patch"))
+        elif old_count == 0 and new_count >= 1:
+            plan.append((label, "already patched"))
+        else:
+            errors.append(f"{label}: old={old_count} new={new_count}")
+
+    for label, action in plan:
+        print(f"{action:16s} {label}")
+    if errors:
+        print("\nERROR: refusing to write. Expected exactly one old string per patch.")
+        for e in errors:
+            print("  -", e)
+        print("\nInspect the binary around each label with Python/grep, then adapt")
+        print("ONLY with same-length replacements. Do not guess or use sed.")
+        return 1
+
+    if not apply:
+        print("\nDRY RUN: no files changed. Re-run with --apply after quitting Freebuff.")
+        return 0
+
+    patches_needed = any(a == "patch" for _, a in plan)
+    if patches_needed:
+        backup = BIN.with_name(BIN.name + ".ads-original")
+        if backup.exists():
+            print(f"binary backup already exists, not overwriting: {backup}")
+        else:
+            shutil.copy2(BIN, backup)
+            print(f"binary backup: {backup}")
+        for label, old, new in PATCHES:
+            data = data.replace(old, new, 1)
+        mode = BIN.stat().st_mode & 0o777
+        atomic_write(BIN, data, mode)
+        print(f"patched binary: {BIN}")
+
+    # Post-check every new string is present and every old string is gone.
+    check = BIN.read_bytes()
+    for label, old, new in PATCHES:
+        if check.count(old) != 0 or check.count(new) < 1:
+            print(f"ERROR: post-check failed for {label}")
+            return 1
+
+    write_settings()
+
+    result = subprocess.run([str(BIN), "--version"], text=True,
+                            capture_output=True, check=False)
+    print(f"version exit={result.returncode} stdout={result.stdout.strip()!r}")
+    print("DONE. Fully quit and relaunch Freebuff; the running process keeps old code.")
+    return 0 if result.returncode == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+Example:
+
+    python3 /tmp/freebuff_patch.py
+    # review output; must not print ERROR
+    python3 /tmp/freebuff_patch.py --apply
+
+The script is idempotent: on an already-patched binary it reports
+"already patched" and does not re-edit.
+
+===============================================================================
+7. STEP-BY-STEP PROCEDURE
+===============================================================================
+
+1. Quit every Freebuff window. Confirm no process remains:
+       pgrep -af '\.config/manicode/freebuff' || true
+
+2. Record the version and back up manually (the script also backs up):
+       freebuff --version
+       cp -p ~/.config/manicode/freebuff ~/.config/manicode/freebuff.ads-original
+       cp -p ~/.config/manicode/settings.json ~/.config/manicode/settings.json.ads-backup
+
+3. Save the script from section 6 as /tmp/freebuff_patch.py.
+
+4. Run the dry run:
+       python3 /tmp/freebuff_patch.py
+   Expected: 13 lines, each "patch" or "already patched", and no ERROR.
+
+5. Apply:
+       python3 /tmp/freebuff_patch.py --apply
+
+6. Verify:
+       ~/.config/manicode/freebuff --version
+       ~/.config/manicode/freebuff --help >/dev/null
+
+7. TUI startup smoke test in a throwaway HOME (must reach the login screen
+   without a SyntaxError/panic):
+       TMPH=$(mktemp -d)
+       HOME="$TMPH" TERM=xterm-256color timeout 10s \
+         script -qec "$TMPH/.config/manicode/freebuff" /dev/null \
+         > /tmp/fb-smoke.out 2>&1 || true
+       grep -iE 'SyntaxError|Unhandled|panic|FATAL|TypeError' /tmp/fb-smoke.out
+
+8. Relaunch Freebuff normally. Confirm the running process uses the new file:
+       pgrep -af '\.config/manicode/freebuff'
+       readlink /proc/<pid>/exe      # must NOT say "(deleted)"
+
+9. Test: send a short prompt, watch while thinking/streaming and while typing.
+   There should be no Ad / Sponsored card, strip, statusline, or survey.
+
+===============================================================================
+8. ROLLBACK
+===============================================================================
+
+Quit Freebuff first. Then:
+
+    cp -p ~/.config/manicode/freebuff.ads-original ~/.config/manicode/freebuff
+    cp -p ~/.config/manicode/settings.json.ads-backup ~/.config/manicode/settings.json
+
+If Freebuff's launcher has already downloaded a newer native binary, restoring
+the backup may not match the launcher's expected version. Reinstall 0.2.36 with
+npm if needed, or reapply the patches after the update.
+
+===============================================================================
+9. TROUBLESHOOTING
+===============================================================================
+
+- "old=0 new=0" for a patch:
+  The version/platform differs, or the minified string changed. Stop. Use
+  Python to print the surrounding bytes for that feature, then replace with a
+  same-length false condition. Do not apply a different-length edit.
+
+- SyntaxError / panic after patching:
+  Restore the backup immediately. One replacement almost certainly changed
+  length or hit the wrong occurrence. Re-run the dry run and check counts.
+
+- Ads still appear after a correct patch and full restart:
+  The remaining ad is probably server-injected stream text, not a UI component.
+  Hide it in place by blanking the matching rendered line (replace printable
+  characters with spaces) while keeping the line count/width, so chat text does
+  not shift. Do not delete the surrounding layout.
+
+- Text moves while ads would appear:
+  Prefer hiding the ad's visible text/colors while keeping its box/line height.
+  The patches above delete ad nodes; if a particular surface must preserve
+  layout, render an empty placeholder of the same height instead of returning
+  null.
+
+- Launcher auto-update overwrites patches:
+  Pin the version (for example: npm install -g freebuff@0.2.36), or re-run the
+  dry run and patch after every update. Keep the .ads-original backup.
+
+===============================================================================
+10. FINAL CHECKLIST
+===============================================================================
+
+[ ] Freebuff version is 0.2.36 (or strings were re-derived for this version)
+[ ] All Freebuff processes closed before patching
+[ ] Binary backed up as freebuff.ads-original
+[ ] settings.json backed up
+[ ] Dry run: 13 patches resolved, zero errors
+[ ] --version exits 0
+[ ] --help exits 0
+[ ] Fresh-HOME TUI reaches login with no SyntaxError/panic
+[ ] Relaunched process exe is not "(deleted)"
+[ ] Tested a real prompt: no ads while thinking, streaming, typing, or idle
+
+END OF INSTRUCTIONS
