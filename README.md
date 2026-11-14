@@ -5,5 +5,5 @@ paste in this: "apply https://github.com/dodoXD13/Destroy-freebuffCLI-ads/tree/m
 
 
 Tested on:
-windows 10  =  working
-linux mint  =  working
+- windows 10  =  working
+- linux mint  =  working
